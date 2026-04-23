@@ -224,3 +224,46 @@ SARA_nested <- SARA_species %>%
     n_species = n(),
     .groups = "drop"
   )
+
+#Mapping SAR
+
+# 1. Reproject to a projected CRS in metres
+# Replace 3347 with a CRS appropriate for your study region if needed
+SARA <- st_as_sf(SARA)
+SARA_proj <- st_transform(SARA, 3347)
+
+# 2. Create a grid over the study extent
+grid <- st_make_grid(SARA_proj, cellsize = 5000, what = "polygons") |>
+  st_as_sf() |>
+  mutate(cell_id = row_number())
+
+# 3A. Count ALL records in each grid cell
+ix <- st_intersects(grid, SARA_proj)
+grid$n_records <- lengths(ix)
+
+# 3B. Or count DISTINCT species in each grid cell
+grid$n_species <- sapply(ix, function(i) n_distinct(SARA_proj$speciesID[i]))
+
+# 4. Keep only cells with at least 1 record if you want
+grid_nonzero <- grid |> filter(n_species > 0)
+
+# 5. Plot
+ggplot() +
+  geom_sf(data = map, fill = "grey95", color = "grey70") +
+   geom_sf(data = grid_nonzero, aes(fill = n_species), color = NA) +
+  scale_fill_distiller(
+    palette = "YlOrRd",
+    direction = 1,
+    trans = "sqrt",
+    name = "#SARA"
+  ) +
+  
+    geom_sf(data = ALTO, fill = NA, color = "blue", linewidth = 0.4) +
+  labs(fill = "Number of Species at Risk",
+       title = "Avian Species at Risk Hotspot Map")+
+  coord_sf(
+    xlim = c(alto_bbox["xmin"] - xpad * 1.2, alto_bbox["xmax"] + xpad * 1.2),
+    ylim = c(alto_bbox["ymin"] - ypad * 1.2, alto_bbox["ymax"] + ypad * 1.2),
+    expand = FALSE
+  )+
+  theme_classic()
